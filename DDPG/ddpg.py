@@ -1,4 +1,5 @@
 import torch as T
+import torch.nn.functional as F
 from networks import ActorNetwork, CriticNetwork
 from noise import OUActionNoise
 from buffer import ReplayBuffer
@@ -24,11 +25,11 @@ class Agent():
                                     n_actions=n_actions, name='critic')
 
         self.target_actor = ActorNetwork(alpha, input_dims, fc1_dims, fc2_dims,
-                                  n_actions=n_actions, name='targewt_actor')
-        self.target_critic = ActorNetwork(alpha, input_dims, fc1_dims, fc2_dims,
-                                         n_actions=n_actions, name='targewt_critic')
+                                  n_actions=n_actions, name='target_actor')
+        self.target_critic = CriticNetwork(alpha, input_dims, fc1_dims, fc2_dims,
+                                         n_actions=n_actions, name='target_critic')
 
-        self.apdate_network_parameters(tau=1)
+        self.update_network_parameters(tau=1)
 
     def choose_action(self, observation):
         self.actor.eval()
@@ -70,8 +71,58 @@ class Agent():
 
         target_actions = self.target_actor.forward(states_)
         critic_value_ = self.target_critic.forward(states_, target_actions)
-
         critic_value = self.critic.forward(states, actions)
+
+        critic_value_[done] = 0.0
+        critic_value_ = critic_value_.view(-1)
+
+        target = rewards + self.gamma*critic_value_
+        target = target.view(self.batch_size, 1)
+
+        self.critic.optimizer.zero_grad()
+        critic_loss = F.mse_loss(target, critic_value)
+        critic_loss.backward()
+        self.critic.optimizer.step()
+
+        self.actor.optimizer.zero_grad()
+        actor_loss = - self.critic.forward(states, self.actor.forward(states))
+        actor_loss = T.mean(actor_loss)
+        actor_loss.backward()
+        self.actor.optimizer.step()
+
+        self.update_network_parameters()
+
+    def update_network_parameters(self, tau=None):
+        if tau is None:
+            tau = self.tau
+
+        actor_params = self.actor.named_parameters()
+        critic_params = self.critic.named_parameters()
+        target_actor_params = self.target_actor.named_parameters()
+        target_critic_params = self.target_critic.named_parameters()
+
+        critic_state_dict = dict(critic_params)
+        actor_state_dict = dict(actor_params)
+        target_critic_state_dict = dict(target_critic_params)
+        target_actor_state_dict = dict(target_actor_params)
+
+        for name in critic_state_dict:
+            critic_state_dict[name] = tau * critic_state_dict[name].clone() + \
+                (1-tau) * target_critic_state_dict[name].clone()
+
+        for name in actor_state_dict:
+            actor_state_dict[name] = tau * actor_state_dict[name].clone() + \
+                 (1-tau) * target_actor_state_dict[name].clone()
+
+        self.target_critic.load_state_dict(critic_state_dict)
+        self.target_actor.load_state_dict(actor_state_dict)
+        # self.target_critic.load_state_dict(critic_state_dict, strict=False)
+        # self.target_actor.load_state_dict(actor_state_dict, strict=False)
+
+
+
+
+
 
 
 
