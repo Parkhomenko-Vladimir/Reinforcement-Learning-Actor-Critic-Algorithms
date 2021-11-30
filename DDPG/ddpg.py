@@ -118,13 +118,3 @@ class Agent():
         self.target_actor.load_state_dict(actor_state_dict)
         # self.target_critic.load_state_dict(critic_state_dict, strict=False)
         # self.target_actor.load_state_dict(actor_state_dict, strict=False)
-
-
-
-
-
-
-
-
-
-
