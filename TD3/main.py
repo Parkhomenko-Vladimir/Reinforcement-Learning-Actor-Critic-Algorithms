@@ -24,7 +24,7 @@ if __name__ == '__main__':
         done = False
         score = 0
         while not done:
-            action = agent.chose_action(observation)
+            action = agent.choose_action(observation)
             observation_, reward, done, info = env.step(action)
             agent.remember(observation, action, reward, observation_, done)
             agent.learn()
